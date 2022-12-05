@@ -1,4 +1,4 @@
-Cmake
+cmake
 tensorflow
 Keras-Preprocessing 
 matplotlib              
