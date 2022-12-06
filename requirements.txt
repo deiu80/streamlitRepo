@@ -1,4 +1,3 @@
-
 tensorflow
 Keras-Preprocessing 
 matplotlib              
@@ -8,4 +7,4 @@ keras
 seaborn                
 scikit-learn            
 Pillow
-dlib
+
