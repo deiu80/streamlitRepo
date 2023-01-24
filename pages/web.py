@@ -1,96 +1,72 @@
 import pathlib
-
 import cv2
-import keras_preprocessing
-import matplotlib.pyplot as plt
 import streamlit as st
 from keras_preprocessing.image import load_img
-import numpy as np
 from PIL import Image
 import os
-from keras.models import load_model
+from helpers import get_model_prediction
+from helpers import get_img_face_frame
+from helpers import images_folder_path
+
+st.title("Image uploader")
 
 cascade_path = pathlib.Path(cv2.__file__).parent.absolute() / "data/haarcascade_frontalface_default.xml"
-print(cascade_path)
 clf = cv2.CascadeClassifier(str(cascade_path))
 
-# specify the img directory path
-path = "./Images"
-
 # list files in img directory
-files = os.listdir(path)
-
+files = os.listdir(images_folder_path)
 all_images = ["NA"]
+labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
+
 for file in files:
     # make sure file is an image
     if file.endswith(('.jpg', '.png', 'jpeg')):
-        img_path = path + "/" + file
+        img_path = images_folder_path + "/" + file
         all_images.append(img_path)
-
 
 file = st.file_uploader("Pick an image")
 
-mywidth = 48
 if file is not None:
     original_img = Image.open(file)
-    wpercent = (mywidth / float(original_img.size[0]))
-    hsize = int((float(original_img.size[1]) * float(wpercent)))
-    resized_img = original_img.resize((mywidth, hsize))
-
-    filename = './resized.jpg'
-    resized_img.save(filename)
     original_img.save("./original.jpg")
     file.close()
 else:
     st.write("No image selected")
 
-selected_image = st.sidebar.selectbox("Image Name", all_images)
+selected_image_path = st.sidebar.selectbox("Images Paths", all_images)
 
-loaded_model = load_model('./best_model_optimised_cnn.h5')
-loaded_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-if selected_image != "NA":
-    resized_img = load_img(selected_image, target_size=(48, 48), color_mode="grayscale")
-    img_array = keras_preprocessing.image.img_to_array(resized_img)
-    img_array = np.expand_dims(img_array, axis=0)
-
-    image_input = np.vstack([img_array])
-    #  make predictions of the model
-    prediction = loaded_model.predict(image_input)
-
-    pred_argmaxed = prediction.argmax(axis=-1)
-
-    labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
-
+if selected_image_path != "NA":
+    # original image
     st.title("Here is the image you've selected")
-    st.image(selected_image)
+    st.image(selected_image_path)
 
-    st.write("Prediction: ")
+    # extracting the face from image
+    face_frame = get_img_face_frame(selected_image_path)
+    st.write("Extracted face is: ")
+    st.image(face_frame)
 
-    st.write(labels[np.argmax(prediction)])
+    resized_face_img = load_img(images_folder_path + '/extracted_face.jpg', target_size=(48, 48), color_mode="grayscale")
+    emotion_predicted = get_model_prediction(resized_face_img)
+    st.write("Model's prediction: " + emotion_predicted)
 else:
     if file is not None:
-        # loading the model
-        #  get the image, scale it to 48*48 and convert it to grayscale
+        # get original image
+        #  get face from the image, scale it to 48*48 and convert it to grayscale
+        st.title("Here is the image you've uploaded")
+        img = cv2.imread("./original.jpg")
+        st.image(img)
+        # extracting the face from image
+        face_frame = get_img_face_frame("./original.jpg")
+        st.write("Extracted face is: ")
+        st.image(face_frame)
 
-        resized_img = load_img('./resized.jpg', target_size=(48, 48), color_mode="grayscale")
+        resized_face_img = load_img(images_folder_path + '/extracted_face.jpg', target_size=(48, 48), color_mode="grayscale")
+        emotion_predicted = get_model_prediction(resized_face_img)
+        st.write("Model's prediction: "+ emotion_predicted)
 
-        img_array = keras_preprocessing.image.img_to_array(resized_img)
-        img_array = np.expand_dims(img_array, axis=0)
 
-        image_input = np.vstack([img_array])
-        #  make predictions of the model
-        prediction = loaded_model.predict(image_input)
-        print("Prediction:", prediction[0])
-        print(prediction.shape)
-        pred_argmaxed = prediction.argmax(axis=-1)
-        print(pred_argmaxed)
+agree = st.checkbox('Show the last extracted face')
 
-        labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
-        print(labels[np.argmax(prediction)])
-
-        st.title("Here is the image you've selected")
-        st.image(load_img("./original.jpg"))
-
-        st.write("Prediction: ")
-
-        st.write(labels[np.argmax(prediction)])
+if agree:
+    st.write("Most recent extracted face is:")
+    st.image(load_img(images_folder_path + '/extracted_face.jpg'))
