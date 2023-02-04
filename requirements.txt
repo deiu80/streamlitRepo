@@ -8,3 +8,5 @@ seaborn
 scikit-learn            
 Pillow
 opencv-python
+av
+streamlit_webrtc
