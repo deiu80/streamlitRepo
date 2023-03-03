@@ -11,3 +11,4 @@ opencv-python
 av
 streamlit_webrtc
 deepface
+py-feat
