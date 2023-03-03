@@ -1,0 +1,8 @@
+
+*.toml
+.idea/misc.xml
+.idea/vcs.xml
+.idea/inspectionProfiles/Project_Default.xml
+.idea/inspectionProfiles/profiles_settings.xml
+*.pyc
+Images/.DS_Store
