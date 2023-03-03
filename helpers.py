@@ -1,14 +1,10 @@
 import pathlib
-import pickle
-
 import cv2
 import streamlit as st
 import keras_preprocessing
-import tensorflow
 from keras_preprocessing.image import load_img
 import numpy as np
 from keras.models import load_model
-from skimage.feature import hog
 
 
 def _max_width_():
@@ -27,7 +23,6 @@ def _max_width_():
 
 
 images_folder_path = "./Images"
-faces_folder_path = "./Faces"
 
 extracted_face_path = images_folder_path + "/extracted_face.jpg"
 enhanced_face_path = images_folder_path + "/enhanced_face.jpg"
@@ -57,20 +52,6 @@ def get_enhanced_face_path():
     return enhanced_face_path
 
 
-def prepare_image_for_svm(img):
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    # Perform histogram equalization
-    equalized_image = cv2.equalizeHist(img)
-    # Apply image denoising
-    denoised_image = cv2.fastNlMeansDenoising(equalized_image, None, 10, 7, 21)
-    # apply Laplacian sharpening
-    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
-    filtered = cv2.filter2D(denoised_image, -1, kernel)
-    # cv2.imwrite(images_folder_path + '/filtered_img.jpg', filtered)
-    # print("filtered image written")
-    return filtered
-
-
 def image_enhancer(image):
     '''
 
@@ -94,46 +75,15 @@ def image_enhancer(image):
     return equalized_image
 
 
-def image_resizer(image, width, height):
-    return cv2.resize(image, (width, height), interpolation=cv2.INTER_CUBIC)
+def image_resizer(image, target_size=48):
+    return cv2.resize(image, (target_size, target_size), interpolation=cv2.INTER_CUBIC)
 
 
-@st.cache_data
-def get_prediction_deepface_way(image, img_path='default'):
-    obj = {}
-    obj["emotion"] = {}
-    #  deepface way
-    if img_path != 'default':
-        img = cv2.imread(img_path)
-    else:
-        img = image
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    img_gray = cv2.resize(img_gray, (48, 48))
-    img_gray = keras_preprocessing.image.img_to_array(img_gray)
-    img_gray = np.expand_dims(img_gray, axis=0)
-    img_gray /= 255
-    loaded_model = load_model('./best_model_optimised_cnn.h5')
-    loaded_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    deepface_emotion_predictions = loaded_model.predict(img_gray, verbose=1)[0, :]
-    sum_of_predictions = deepface_emotion_predictions.sum()
-
-    for i, emotion_label in enumerate(labels):
-        print(deepface_emotion_predictions[i])
-        emotion_prediction = round(100 * deepface_emotion_predictions[i] / sum_of_predictions, 5)
-        obj["emotion"][emotion_label] = emotion_prediction
-    obj["dominant_emotion"] = labels[np.argmax(deepface_emotion_predictions)]
-    print('deepface', deepface_emotion_predictions)
-
-    return obj["emotion"], obj["dominant_emotion"]
-
-
-@st.cache_data
 def get_model_prediction(image):
     '''
     :param image of 48*48 size and grayscale
     :return: name of the predicted class, e.g happy, sad
     '''
-    # old way
     img_array = keras_preprocessing.image.img_to_array(image)
     img_array = np.expand_dims(img_array, axis=0)
     image_input = np.vstack([img_array])
@@ -142,15 +92,7 @@ def get_model_prediction(image):
     #  make predictions of the model
     prediction = loaded_model.predict(image_input)
 
-    # Get the confidence score for each class
-    class_probabilities = tensorflow.nn.softmax(prediction[0]).numpy()
-    probabilities = tensorflow.math.softmax(prediction[0], axis=-1)
-
-    confidences = []
-    for lab, prob in zip(labels, class_probabilities):
-        confidences.append(round(prob * 100, 5))
-
-    return labels[np.argmax(prediction)], confidences
+    return labels[np.argmax(prediction)]
 
 
 # above method is for reading images from disk
@@ -196,7 +138,6 @@ def get_all_faces(img_path):
     return list_of_faces
 
 
-@st.cache_data
 def get_marked_image(img_path):
     modified_img = cv2.imread(img_path)
     gray_img = cv2.cvtColor(modified_img, cv2.COLOR_BGR2GRAY)
@@ -214,7 +155,6 @@ def get_marked_image(img_path):
     return cv2.cvtColor(modified_img, cv2.COLOR_BGR2RGB), len(faces), faces_frames
 
 
-@st.cache_data
 def face_detect_NN(image_path, threshold):
     original_image = cv2.imread(image_path)
     modelFile = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
@@ -249,34 +189,4 @@ def face_detect_NN(image_path, threshold):
         faces_frames.append(cv2.cvtColor(face_frame, cv2.COLOR_BGR2RGB))
         cv2.rectangle(original_image, (x1, y1), (x2, y2), (0, 255, 0), 4)
 
-    # writing the faces extracted to the folder
-    for f, nr in zip(faces_frames, range(len(face_frame))):
-        cv2.imwrite(faces_folder_path + '/face_' + str(nr) + '.jpg', cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
     return cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB), len(bboxes), faces_frames
-
-
-@st.cache_data()
-def setup_svm():
-    filename = "svm_model_only_faces.sav"
-    loaded_svm_model = pickle.load(open(filename, 'rb'))
-    return loaded_svm_model
-
-
-@st.cache_resource
-def svm_get_predict(img_path, _loaded_model):
-    features = []
-    im = cv2.imread(img_path)
-    im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-    im = image_resizer(im, 64, 64)
-    fd1, hog_image = hog(im, orientations=7, pixels_per_cell=(8, 8), cells_per_block=(4, 4), block_norm='L2-Hys',
-                         transform_sqrt=False, visualize=True)
-    cv2.imwrite(images_folder_path+'/hog_image.jpg',hog_image)
-    features.append(fd1)
-    # extract features from the image
-    features = np.array(features)
-
-    # use the SVM model to make a prediction
-    predicted_class = _loaded_model.predict(features)
-    probabilities = _loaded_model.predict_proba(features)
-
-    return predicted_class[0], probabilities[0]
