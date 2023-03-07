@@ -1,16 +1,18 @@
-import streamlit as st
 import os
 
 import cv2
 import streamlit as st
 from PIL import Image
 from deepface import DeepFace
-# from feat.detector import Detector
-# from feat.utils.io import get_test_data_path
+from rmn import RMN
+
 
 from helpers import face_detect_NN, get_marked_image, labels, faces_folder_path, get_prediction_deepface_way, \
     svm_get_predict, setup_svm, prepare_image_for_svm
 from helpers import images_folder_path
+
+
+
 
 all_images = ["NA"]
 group_images = ["NA"]
@@ -27,10 +29,8 @@ for file in files:
 
 single_face_img_path = 'Images/single_face.jpg'
 
-
 svm_det = None
 resmask_det = None
-
 
 svm_model_aws = setup_svm()
 
@@ -74,46 +74,64 @@ def get_dictonary_probs(probabilities):
     return obj
 
 
-with tab1:
-    st.title("Compare the classifiers ")
-    # st.write("We do have 5 models available: own model,own SVM classifier, DeepFace and PyFeat( SVM, ResMasknet )")
-    # st.write('Deepface Github https://github.com/serengil/deepface')
-    # st.write('PyFeat https://py-feat.org/pages/intro.html')
+@st.cache_data
+def get_dictionary_probs_RMN(results):
+    obj = {}
+    for record in results[0]['proba_list']:
+        for label in record:
+            obj[label] = round(record[label] * 100, 5)
 
+    return obj
+
+
+@st.cache_resource
+def load_RMN():
+    rmn = RMN()
+    return rmn
+
+
+with tab1:
+
+    st.title("Compare the classifiers ")
+    st.write("We do have 4 models available: own model,own SVM classifier, DeepFace and ResMasknet ")
+    st.write('Deepface Github https://github.com/serengil/deepface')
+    st.write('ResmaskNet https://github.com/phamquiluan/ResidualMaskingNetwork')
 
     returned_img, nr, faces_extracted = face_detect_NN(single_face_img_path, 0.7)
     analysis = DeepFace.analyze(single_face_img_path, actions=['emotion'], detector_backend='mtcnn')
     st.image(returned_img)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write("Class probabilities ")
+        st.subheader("Using own model")
+        obj, dominant_emotion = get_prediction_deepface_way(returned_img, 'Faces/face_0.jpg')
+        st.write('Dominant emotion: ',dominant_emotion)
+        st.write(obj)
 
-    st.write("Class probabilities ")
-    st.subheader("Using own model")
-    obj, dominant_emotion = get_prediction_deepface_way(returned_img, 'Faces/face_0.jpg')
-    st.write(dominant_emotion)
-    st.write(obj)
+        st.subheader("Using Deepface library")
+        analysis[0]['emotion'] = format_dictionary_probs(analysis[0]['emotion'])
+        st.write('Dominant emotion: ', analysis[0]['dominant_emotion'])
+        st.write(analysis[0]['emotion'])
 
-    st.subheader("Using Deepface library")
-    analysis[0]['emotion'] = format_dictionary_probs(analysis[0]['emotion'])
+    with col2:
+        # SVM prediction
+        im = cv2.imread('Faces/face_0.jpg')
 
-    st.write(analysis[0]['emotion'])
-    st.write('Dominant emotion', analysis[0]['dominant_emotion'])
+        predicted_class, probabilities = svm_get_predict("Faces/face_0.jpg", svm_model_aws)
+        st.subheader("Using own SVM")
+        st.write("Dominant emotion: ", predicted_class)
 
+        dictionary = get_dictonary_probs(probabilities)
+        st.write(dictionary)
 
-    im = cv2.imread('Faces/face_0.jpg')
-    st.image(prepare_image_for_svm(im))
-    predicted_class, probabilities = svm_get_predict("Faces/face_0.jpg", svm_model_aws)
-    st.subheader("Using own SVM")
-    st.write("Dominant emotion: ", predicted_class)
-
-    dictionary = get_dictonary_probs(probabilities)
-    st.write(dictionary)
-
-    # svm_detections, resmask_detections = predictions(svm_det, resmask_det, single_face_img_path)
-    # st.subheader("Using PyFeat library")
-    # st.write("SVM classifier")
-    # st.write(svm_detections.emotions)
-    #
-    # st.write("Resmasknet classifier")
-    # st.write(resmask_detections.emotions)
+        # RMN prediction
+        rmn = load_RMN()
+        st.subheader("Resmasknet classifier")
+        im = cv2.imread(single_face_img_path)
+        results = rmn.detect_emotion_for_single_frame(im)
+        st.write('Dominant emotion: ', results[0]['emo_label'])
+        dict_proba = get_dictionary_probs_RMN(results)
+        st.write(dict_proba)
 
 with tab2:
     group_image_box = st.checkbox("Use group images")
@@ -186,8 +204,6 @@ with tab3:
         selected_image_path = st.sidebar.selectbox("Singular subjects", all_images)
         if selected_image_path != "NA":
 
-
-
             haar_column, dnn_column = st.columns(2)
 
             haar_column.subheader('Face detectoru using HaarCascade classifier ')
@@ -208,7 +224,8 @@ with tab3:
                 dnn_column.write(obj)
 
                 dnn_column.subheader('Using Deepface library')
-                face_analysis = DeepFace.analyze(faces_folder_path+'/face_0.jpg', actions=['emotion'], detector_backend='mtcnn',
+                face_analysis = DeepFace.analyze(faces_folder_path + '/face_0.jpg', actions=['emotion'],
+                                                 detector_backend='mtcnn',
                                                  enforce_detection=False)
                 face_analysis[0]['emotion'] = format_dictionary_probs(face_analysis[0]['emotion'])
 
@@ -220,7 +237,6 @@ with tab3:
                 dictionary = get_dictonary_probs(probabilities)
                 dnn_column.write(predicted_class)
                 dnn_column.write(dictionary)
-
 
                 # svm_detections, resmask_detections = predictions(svm_det, resmask_det, single_face_img_path)
                 # dnn_column.subheader("Using SVM classifier")

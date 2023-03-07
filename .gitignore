@@ -6,3 +6,4 @@
 .idea/inspectionProfiles/profiles_settings.xml
 *.pyc
 Images/.DS_Store
+/.idea/streamlitRepo.iml
