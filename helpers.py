@@ -129,11 +129,9 @@ def get_prediction_deepface_way(image, img_path='default'):
     sum_of_predictions = deepface_emotion_predictions.sum()
 
     for i, emotion_label in enumerate(labels):
-        print(deepface_emotion_predictions[i])
         emotion_prediction = round(100 * deepface_emotion_predictions[i] / sum_of_predictions, 5)
         obj["emotion"][emotion_label] = emotion_prediction
     obj["dominant_emotion"] = labels[np.argmax(deepface_emotion_predictions)]
-    print('deepface', deepface_emotion_predictions)
 
     return obj["emotion"], obj["dominant_emotion"]
 

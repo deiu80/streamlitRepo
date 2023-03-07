@@ -5,10 +5,12 @@ matplotlib-inline
 numpy                   
 keras                   
 seaborn                
-scikit-learn            
+scikit-learn  
+scikit-image          
 Pillow
 opencv-python
 av
 streamlit_webrtc
 deepface
 boto3
+rmn
