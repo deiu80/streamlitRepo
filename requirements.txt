@@ -10,7 +10,6 @@ scikit-image
 Pillow
 opencv-python
 av
-streamlit_webrtc
 deepface
 boto3
 rmn
