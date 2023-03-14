@@ -8,11 +8,8 @@ from rmn import RMN
 
 
 from helpers import face_detect_NN, get_marked_image, labels, faces_folder_path, get_prediction_deepface_way, \
-    svm_get_predict, setup_svm, prepare_image_for_svm
+    svm_get_predict, setup_svm, prepare_image_for_svm, svm_model_exists
 from helpers import images_folder_path
-
-
-
 
 all_images = ["NA"]
 group_images = ["NA"]
@@ -29,36 +26,10 @@ for file in files:
 
 single_face_img_path = 'Images/single_face.jpg'
 
-svm_det = None
-resmask_det = None
 
 svm_model_aws = setup_svm()
 
-# @st.cache_data(show_spinner=True)
-# def load_detectors():
-#     global svm_det, resmask_det
-#     svm_det = Detector(emotion_model='svm')
-#     resmask_det = Detector(emotion_model='resmasknet')
-#
-#
-# load_detectors()
-
 tab1, tab2, tab3 = st.tabs(["Example", "Group Images", "Single Images"])
-
-
-@st.cache_resource
-def predictions(_svm_det, _resmas_det, img_path):
-    face_prediction_using_resk = _resmas_det.detect_image(img_path)
-    face_prediction_using_svm = _svm_det.detect_image(img_path)
-    return face_prediction_using_svm, face_prediction_using_resk
-
-
-@st.cache_data
-def face_predictions(_svm_det, _resmas_det, img_path):
-    face_prediction_using_resk = _resmas_det.detect_image(img_path)
-    face_prediction_using_svm = _svm_det.detect_image(img_path)
-    return face_prediction_using_svm, face_prediction_using_resk
-
 
 def format_dictionary_probs(analysis):
     for k in analysis:
@@ -115,14 +86,14 @@ with tab1:
 
     with col2:
         # SVM prediction
-        im = cv2.imread('Faces/face_0.jpg')
+        if svm_model_exists():
+            im = cv2.imread('Faces/face_0.jpg')
+            predicted_class, probabilities = svm_get_predict("Faces/face_0.jpg", svm_model_aws)
+            st.subheader("Using own SVM")
+            st.write("Dominant emotion: ", predicted_class)
 
-        predicted_class, probabilities = svm_get_predict("Faces/face_0.jpg", svm_model_aws)
-        st.subheader("Using own SVM")
-        st.write("Dominant emotion: ", predicted_class)
-
-        dictionary = get_dictonary_probs(probabilities)
-        st.write(dictionary)
+            dictionary = get_dictonary_probs(probabilities)
+            st.write(dictionary)
 
         # RMN prediction
         rmn = load_RMN()
@@ -186,12 +157,6 @@ with tab2:
                         dictionary = get_dictonary_probs(probabilities)
                         expander2.write(predicted_class)
                         expander2.write(dictionary)
-                        # svm_detections, resmask_detections = face_predictions(svm_det, resmask_det, face_path)
-                        # expander2.subheader("Using SVM classifier")
-                        # expander2.write(svm_detections.emotions)
-                        #
-                        # expander2.subheader("Using resmasknet classifier")
-                        # expander2.write(resmask_detections.emotions)
                     face_idx += 1
         else:
             st.write("You can also select an image from left bar")
@@ -224,7 +189,8 @@ with tab3:
                 dnn_column.write(obj)
 
                 dnn_column.subheader('Using Deepface library')
-                face_analysis = DeepFace.analyze(faces_folder_path + '/face_0.jpg', actions=['emotion'],
+                face_analysis = DeepFace.analyze(faces_folder_path + '/face_0.jpg',
+                                                 actions=['emotion'],
                                                  detector_backend='mtcnn',
                                                  enforce_detection=False)
                 face_analysis[0]['emotion'] = format_dictionary_probs(face_analysis[0]['emotion'])
@@ -237,12 +203,5 @@ with tab3:
                 dictionary = get_dictonary_probs(probabilities)
                 dnn_column.write(predicted_class)
                 dnn_column.write(dictionary)
-
-                # svm_detections, resmask_detections = predictions(svm_det, resmask_det, single_face_img_path)
-                # dnn_column.subheader("Using SVM classifier")
-                # dnn_column.write(svm_detections.emotions)
-                #
-                # dnn_column.subheader("Using resmasknet classifier")
-                # dnn_column.write(resmask_detections.emotions)
         else:
             st.write("You can also select an image from left bar")

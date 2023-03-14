@@ -7,3 +7,5 @@
 *.pyc
 Images/.DS_Store
 /.idea/streamlitRepo.iml
+.idea/.name
+.DS_Store

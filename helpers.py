@@ -35,7 +35,7 @@ def download_model_from_aws(file_name_in_aws):
                       aws_secret_access_key=st.secrets['AWS_SECRET_ACCESS_KEY'])
     print("client_ready")
     s3.download_file(s3_bucket_name, file_name_in_aws, file_name_in_aws)
-    print("downloaded_file", file_name_in_aws)
+    print("downloaded_file:", file_name_in_aws)
 
 
 images_folder_path = "./Images"
@@ -47,11 +47,19 @@ enhanced_face_path = images_folder_path + "/enhanced_face.jpg"
 labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
 
 
+def svm_model_exists():
+    filename = "svm_model_only_faces.sav"
+    if os.path.exists(filename):
+        return True
+    return False
+
+
 @st.cache_resource
 def get_viola_classifier():
     viola_jones = pathlib.Path(cv2.__file__).parent.absolute() / "data/haarcascade_frontalface_alt.xml"
     viola_jones_classifier = cv2.CascadeClassifier(str(viola_jones))
     return viola_jones_classifier
+
 
 @st.cache_resource
 def get_classifier():
@@ -129,9 +137,11 @@ def get_prediction_deepface_way(image, img_path='default'):
     sum_of_predictions = deepface_emotion_predictions.sum()
 
     for i, emotion_label in enumerate(labels):
+        print(deepface_emotion_predictions[i])
         emotion_prediction = round(100 * deepface_emotion_predictions[i] / sum_of_predictions, 5)
         obj["emotion"][emotion_label] = emotion_prediction
     obj["dominant_emotion"] = labels[np.argmax(deepface_emotion_predictions)]
+    print('deepface', deepface_emotion_predictions)
 
     return obj["emotion"], obj["dominant_emotion"]
 
@@ -167,11 +177,11 @@ def get_img_face_frame(img_path):
     cv2_img = cv2.imread(img_path)
     gray_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
 
-    faces = get_classifier().detectMultiScale(gray_img,
-                                                scaleFactor=1.2,
-                                                minNeighbors=5,
-                                                minSize=(30, 30),
-                                                flags=cv2.CASCADE_FIND_BIGGEST_OBJECT)
+    faces = get_viola_classifier().detectMultiScale(gray_img,
+                                                    scaleFactor=1.2,
+                                                    minNeighbors=5,
+                                                    minSize=(30, 30),
+                                                    flags=cv2.CASCADE_FIND_BIGGEST_OBJECT)
 
     for (x, y, width, height) in faces:
         cv2.rectangle(gray_img, (x, y), (x + width, y + height), (0, 255, 0), 4)
@@ -204,15 +214,16 @@ def get_all_faces(img_path):
     return list_of_faces
 
 
+@st.cache_data()
 def get_marked_image(img_path):
     modified_img = cv2.imread(img_path)
     gray_img = cv2.cvtColor(modified_img, cv2.COLOR_BGR2GRAY)
 
     faces = get_viola_classifier().detectMultiScale(gray_img,
-                                 scaleFactor=1.1,
-                                 minNeighbors=3,
-                                 minSize=(30, 30),
-                                 flags=cv2.CASCADE_FIND_BIGGEST_OBJECT)
+                                                    scaleFactor=1.1,
+                                                    minNeighbors=3,
+                                                    minSize=(30, 30),
+                                                    flags=cv2.CASCADE_FIND_BIGGEST_OBJECT)
     faces_frames = []
     for (x, y, width, height) in faces:
         face_frame = modified_img[y:y + height, x:x + width]
@@ -250,6 +261,7 @@ def face_detect_NN(image_path, threshold):
             x2 = int(detections[0, 0, i, 5] * frameWidth)
             y2 = int(detections[0, 0, i, 6] * frameHeight)
             bboxes.append([x1, y1, x2, y2])
+
     faces_frames = []
     for (x1, y1, x2, y2) in bboxes:
         face_frame = original_image[y1:y2, x1:x2]
@@ -271,11 +283,13 @@ def setup_svm():
     else:
         st.warning(filename + ' svm model does not exist')
         download_button = st.button(label="Download SVM model from AWS")
+
         if download_button:
             download_model_from_aws(filename)
             print("Starting...")
             time.sleep(6)
             loaded_svm_model = pickle.load(open(filename, 'rb'))
+
             return loaded_svm_model
         return None
 
