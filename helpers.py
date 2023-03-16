@@ -11,21 +11,6 @@ from skimage.feature import hog
 import boto3, os, time
 
 
-def _max_width_():
-    max_width_str = f"max-width: 2000px;"
-    page_title_str = "CE301 - Image uploader"
-    st.markdown(
-        f"""
-    <style>
-    .reportview-container .main .block-container{{
-        {max_width_str}
-    }}
-    </style>    
-    """,
-        unsafe_allow_html=True,
-    )
-
-
 def download_model_from_aws(file_name_in_aws):
     """Accessing the S3 buckets using boto3 client"""
     # file_name_in_aws = 'svm_model_only_faces.sav'
@@ -40,11 +25,14 @@ def download_model_from_aws(file_name_in_aws):
 
 images_folder_path = "./Images"
 faces_folder_path = "./Faces"
+single_face_img_path = 'Images/single_face.jpg'
+
+example_face_img_path='Faces/example_image.jpg'
 
 extracted_face_path = images_folder_path + "/extracted_face.jpg"
 enhanced_face_path = images_folder_path + "/enhanced_face.jpg"
 
-labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
+emotion_labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
 
 
 def svm_model_exists():
@@ -80,6 +68,7 @@ def prepare_image_for_svm(img):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # Perform histogram equalization
     equalized_image = cv2.equalizeHist(img)
+
     # Apply image denoising
     denoised_image = cv2.fastNlMeansDenoising(equalized_image, None, 10, 7, 21)
     # apply Laplacian sharpening
@@ -136,11 +125,11 @@ def get_prediction_deepface_way(image, img_path='default'):
     deepface_emotion_predictions = loaded_model.predict(img_gray, verbose=1)[0, :]
     sum_of_predictions = deepface_emotion_predictions.sum()
 
-    for i, emotion_label in enumerate(labels):
+    for i, emotion_label in enumerate(emotion_labels):
         print(deepface_emotion_predictions[i])
         emotion_prediction = round(100 * deepface_emotion_predictions[i] / sum_of_predictions, 5)
         obj["emotion"][emotion_label] = emotion_prediction
-    obj["dominant_emotion"] = labels[np.argmax(deepface_emotion_predictions)]
+    obj["dominant_emotion"] = emotion_labels[np.argmax(deepface_emotion_predictions)]
     print('deepface', deepface_emotion_predictions)
 
     return obj["emotion"], obj["dominant_emotion"]
@@ -165,10 +154,10 @@ def get_model_prediction(_image):
     class_probabilities = tensorflow.nn.softmax(prediction[0]).numpy()
 
     confidences = []
-    for lab, prob in zip(labels, class_probabilities):
+    for lab, prob in zip(emotion_labels, class_probabilities):
         confidences.append(round(prob * 100, 5))
 
-    return labels[np.argmax(prediction)], confidences
+    return emotion_labels[np.argmax(prediction)], confidences
 
 
 # above method is for reading images from disk
@@ -234,6 +223,7 @@ def get_marked_image(img_path):
 
 @st.cache_data
 def face_detect_NN(image_path, threshold):
+
     original_image = cv2.imread(image_path)
     modelFile = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
     configFile = "deploy.prototxt"
@@ -248,7 +238,6 @@ def face_detect_NN(image_path, threshold):
     bboxes = []
     # Forward pass through the network
     detections = net.forward()
-
     # Loop over the detections
     for i in range(10):
         # Get the confidence score of the detection
@@ -269,8 +258,12 @@ def face_detect_NN(image_path, threshold):
         cv2.rectangle(original_image, (x1, y1), (x2, y2), (0, 255, 0), 4)
 
     # writing the faces extracted to the folder
-    for f, nr in zip(faces_frames, range(len(face_frame))):
-        cv2.imwrite(faces_folder_path + '/face_' + str(nr) + '.jpg', cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+    if image_path == single_face_img_path:
+        for f, nr in zip(faces_frames, range(len(face_frame))):
+            cv2.imwrite(faces_folder_path + '/example_image.jpg', cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+    else:
+        for f, nr in zip(faces_frames, range(len(face_frame))):
+            cv2.imwrite(faces_folder_path + '/face_' + str(nr) + '.jpg', cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
     return cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB), len(bboxes), faces_frames
 
 
@@ -292,7 +285,6 @@ def setup_svm():
 
             return loaded_svm_model
         return None
-
 
 @st.cache_resource
 def svm_get_predict(img_path, _loaded_model):

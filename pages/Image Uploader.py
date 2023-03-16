@@ -3,10 +3,10 @@ import cv2
 import streamlit as st
 from PIL import Image
 import os
-from helpers import face_detect_NN, get_marked_image, _max_width_, labels
+from helpers import face_detect_NN, get_marked_image, emotion_labels
 from helpers import images_folder_path
 
-_max_width_()
+
 
 st.title("Image uploader")
 
@@ -41,7 +41,6 @@ if file_uploaded is not None:
     haar_column, dnn_column = st.columns(2)
 
     haar_column.subheader('HaarCascade classifier example')
-    print(uploaded_file_path)
     marked_image, nr_faces, faces_frames = get_marked_image(uploaded_file_path)
     haar_column.metric(label="Faces found", value=nr_faces)
 

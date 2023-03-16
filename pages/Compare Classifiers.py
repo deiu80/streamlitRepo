@@ -6,9 +6,8 @@ from PIL import Image
 from deepface import DeepFace
 from rmn import RMN
 
-
-from helpers import face_detect_NN, get_marked_image, labels, faces_folder_path, get_prediction_deepface_way, \
-    svm_get_predict, setup_svm, prepare_image_for_svm, svm_model_exists
+from helpers import face_detect_NN, get_marked_image, emotion_labels, faces_folder_path, get_prediction_deepface_way, \
+    svm_get_predict, setup_svm, prepare_image_for_svm, svm_model_exists,single_face_img_path, example_face_img_path
 from helpers import images_folder_path
 
 all_images = ["NA"]
@@ -24,12 +23,18 @@ for file in files:
         else:
             all_images.append(img_path)
 
-single_face_img_path = 'Images/single_face.jpg'
-
 
 svm_model_aws = setup_svm()
 
 tab1, tab2, tab3 = st.tabs(["Example", "Group Images", "Single Images"])
+
+labels = {
+    "top_left": "CNN model: ",
+    "top_right": "SVM model: ",
+    "bottom_left": "Deepface: ",
+    "bottom_right": "ResMaskNet: "
+}
+
 
 def format_dictionary_probs(analysis):
     for k in analysis:
@@ -37,10 +42,9 @@ def format_dictionary_probs(analysis):
     return analysis
 
 
-@st.cache_data
 def get_dictonary_probs(probabilities):
     obj = {}
-    for i, emotion_label in enumerate(labels):
+    for i, emotion_label in enumerate(emotion_labels):
         obj[emotion_label] = round(100 * probabilities[i], 5)
     return obj
 
@@ -61,48 +65,89 @@ def load_RMN():
     return rmn
 
 
-with tab1:
+def annotate_example_image(img, labels):
+    label_positions = {
+        "top_left": (10, 20),
+        "top_right": (img.shape[1] - 5 - len(labels["top_right"]) * 11, 20),
+        "bottom_left": (10, img.shape[0] - 10),
+        "bottom_right": (img.shape[1] - 10 - len(labels["bottom_right"]) * 11, img.shape[0] - 10)
+    }
+    # Define the font and font scale to use for the labels
+    font = cv2.FONT_HERSHEY_DUPLEX
+    font_scale = 0.6
 
+    # Loop through each label and draw it on the image
+    for label, text in labels.items():
+        cv2.putText(img, text, label_positions[label], font, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
+
+    return img
+
+
+with tab1:
     st.title("Compare the classifiers ")
-    st.write("We do have 4 models available: own model,own SVM classifier, DeepFace and ResMasknet ")
-    st.write('Deepface Github https://github.com/serengil/deepface')
-    st.write('ResmaskNet https://github.com/phamquiluan/ResidualMaskingNetwork')
+    st.write("We do have 4 models available: own CNN model,own SVM, DeepFace and ResMasknet ")
 
     returned_img, nr, faces_extracted = face_detect_NN(single_face_img_path, 0.7)
+
+    # OWN CNN
+    obj, dominant_emotion = get_prediction_deepface_way(returned_img, example_face_img_path)
+    labels['top_left'] += dominant_emotion + " " + str(round(obj[dominant_emotion], 2))
+    # Deepface
     analysis = DeepFace.analyze(single_face_img_path, actions=['emotion'], detector_backend='mtcnn')
-    st.image(returned_img)
+    analysis[0]['emotion'] = format_dictionary_probs(analysis[0]['emotion'])
+    dominant_emotion_deepface = analysis[0]['dominant_emotion']
+    labels["bottom_left"] += analysis[0]['dominant_emotion'] + " " + str(
+        round(analysis[0]['emotion'][dominant_emotion_deepface], 2))
+
+    # SVM prediction
+    predicted_class, probabilities = svm_get_predict(example_face_img_path, svm_model_aws)
+    svm_dictionary = get_dictonary_probs(probabilities)
+    labels['top_right'] += predicted_class + ' ' + str(round(svm_dictionary[predicted_class], 2))
+
+    # RMN prediction
+
+    rmn = load_RMN()
+    im = cv2.imread(single_face_img_path)
+    results = rmn.detect_emotion_for_single_frame(im)
+    rmn_dict_proba = get_dictionary_probs_RMN(results)
+    labels['bottom_right'] += results[0]['emo_label'] + ' ' + str(round(rmn_dict_proba[results[0]['emo_label']], 2))
+
+    annoted_image = annotate_example_image(returned_img, labels)
+    st.image(annoted_image)
+    st.write("You can notice the predicted enotion and confidence scores for each class down below")
+
     col1, col2 = st.columns(2)
+    # Define the labels and their positions
+
     with col1:
-        st.write("Class probabilities ")
         st.subheader("Using own model")
-        obj, dominant_emotion = get_prediction_deepface_way(returned_img, 'Faces/face_0.jpg')
-        st.write('Dominant emotion: ',dominant_emotion)
+
+        st.write('Dominant emotion: ', dominant_emotion)
         st.write(obj)
 
         st.subheader("Using Deepface library")
-        analysis[0]['emotion'] = format_dictionary_probs(analysis[0]['emotion'])
+
         st.write('Dominant emotion: ', analysis[0]['dominant_emotion'])
         st.write(analysis[0]['emotion'])
 
     with col2:
         # SVM prediction
         if svm_model_exists():
-            im = cv2.imread('Faces/face_0.jpg')
-            predicted_class, probabilities = svm_get_predict("Faces/face_0.jpg", svm_model_aws)
+            im = cv2.imread(example_face_img_path)
+
             st.subheader("Using own SVM")
             st.write("Dominant emotion: ", predicted_class)
 
-            dictionary = get_dictonary_probs(probabilities)
-            st.write(dictionary)
+            st.write(svm_dictionary)
 
-        # RMN prediction
-        rmn = load_RMN()
         st.subheader("Resmasknet classifier")
-        im = cv2.imread(single_face_img_path)
-        results = rmn.detect_emotion_for_single_frame(im)
+
         st.write('Dominant emotion: ', results[0]['emo_label'])
-        dict_proba = get_dictionary_probs_RMN(results)
-        st.write(dict_proba)
+
+        st.write(rmn_dict_proba)
+    st.subheader("Credits to the following projects:")
+    st.write('Deepface : https://github.com/serengil/deepface')
+    st.write('ResmaskNet : https://github.com/phamquiluan/ResidualMaskingNetwork')
 
 with tab2:
     group_image_box = st.checkbox("Use group images")
@@ -111,16 +156,17 @@ with tab2:
         group_image_path = st.sidebar.selectbox("Group Images", group_images)
         if group_image_path != "NA":
             st.title("Here is the image you've selected")
-            rgb_img = cv2.cvtColor(cv2.imread(group_image_path), cv2.COLOR_BGR2RGB)
-            st.image(rgb_img)
+            st.write(
+                'Notice how the 2 face detection classifiers perform. On the right the neural network trained classifier is much better at finding faces')
+
             haar_column, dnn_column = st.columns(2)
-            haar_column.subheader('HaarCascade classifier example')
+            haar_column.subheader('HaarCascade classifier')
 
             marked_image, nr_faces, faces_frames = get_marked_image(group_image_path)
             haar_column.metric(label="Faces found", value=nr_faces)
             haar_column.image(marked_image)
 
-            dnn_column.subheader("Classifier pre-trained on Res10 ")
+            dnn_column.subheader("Classifier pre-trained on Res10")
             annotated_img, nr_faces2, faces_extracted = face_detect_NN(group_image_path, 0.7)
             dnn_column.metric(label="Faces found", value=nr_faces2)
             dnn_column.image(annotated_img)
@@ -154,9 +200,18 @@ with tab2:
                         predicted_class, probabilities = svm_get_predict(face_path, svm_model_aws)
 
                         expander2.subheader("Using own SVM")
-                        dictionary = get_dictonary_probs(probabilities)
+                        svm_dictionary = get_dictonary_probs(probabilities)
                         expander2.write(predicted_class)
-                        expander2.write(dictionary)
+                        expander2.write(svm_dictionary)
+
+                        expander2.subheader("Using ResMaskNet")
+
+                        results = rmn.detect_emotion_for_single_frame(face)
+                        rmn_dict_proba = get_dictionary_probs_RMN(results)
+
+                        expander2.write(results[0]['emo_label'])
+                        expander2.write(rmn_dict_proba)
+
                     face_idx += 1
         else:
             st.write("You can also select an image from left bar")
@@ -200,8 +255,8 @@ with tab3:
 
                 predicted_class, probabilities = svm_get_predict(faces_folder_path + "/face_0.jpg", svm_model_aws)
                 dnn_column.subheader("using own SVM")
-                dictionary = get_dictonary_probs(probabilities)
+                svm_dictionary = get_dictonary_probs(probabilities)
                 dnn_column.write(predicted_class)
-                dnn_column.write(dictionary)
+                dnn_column.write(svm_dictionary)
         else:
             st.write("You can also select an image from left bar")

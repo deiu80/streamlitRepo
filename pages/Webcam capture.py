@@ -7,10 +7,10 @@ from helpers import get_model_prediction, image_enhancer, get_classifier
 import numpy as np
 
 st.set_page_config(
-    page_title="CE301 - Webcam Live Feed"
+    page_title="CE301 - Capture from Webcam Live Feed"
 )
 
-st.title("Webcam Live Feed")
+st.title("Capture from Webcam Live Feed")
 
 img_file_buffer = st.camera_input("Take a frontal picture")
 path = "./Images"
