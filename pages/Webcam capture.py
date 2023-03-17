@@ -1,47 +1,79 @@
-import pathlib
-from os.path import exists
-import streamlit as st
 import cv2
-from keras_preprocessing.image import load_img
-from helpers import get_model_prediction, image_enhancer, get_classifier
+from deepface import DeepFace
+
+from helpers import get_default_classifier, faces_folder_path, svm_model_exists, \
+    svm_get_predict, get_prediction_of_own_CNN, preprocess_image_for_svm, face_detect_NN, loading_RMN, \
+    format_dictionary_probs, get_dictonary_probs, get_dictionary_probs_RMN,setup_svm
 import numpy as np
 
+import streamlit as st
+
+
 st.set_page_config(
-    page_title="CE301 - Capture from Webcam Live Feed"
+    page_title="CE301 - Capture from Webcam Live Feed",
+    layout="wide"
 )
 
 st.title("Capture from Webcam Live Feed")
 
 img_file_buffer = st.camera_input("Take a frontal picture")
-path = "./Images"
+
+capture_path = faces_folder_path + "/rgb_capture.png"
+capture_face_path = faces_folder_path + "/capture_face.jpg"
 
 if img_file_buffer is not None:
     bytes_data = img_file_buffer.getvalue()
-    cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+    rgb_capture = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+    cv2.imwrite(capture_path, rgb_capture)
 
-    gray_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
+    returned_img, nr, faces_extracted_list = face_detect_NN('', rgb_capture)
 
-    faces = get_classifier().detectMultiScale(gray_img,
-                                        scaleFactor=1.1,
-                                        minNeighbors=5,
-                                        minSize=(30, 30),
-                                        flags=cv2.CASCADE_SCALE_IMAGE)
-    for (x, y, width, height) in faces:
-        cv2.rectangle(gray_img, (x, y), (x + width, y + height), (0, 255, 0), 2)
-        face_frame = gray_img[y:height + y, x:x + width]
-        enhanced_image = image_enhancer(face_frame)
-        # cv2.imwrite(path + "/enhanced_face.jpg", enhanced_image)
-        cv2.imwrite(path + "/extracted_face.jpg", face_frame)
 
-    if exists(path + "/extracted_face.jpg"):
-        st.write("Extracted face is:")
-        st.image(cv2.imread(path + "/extracted_face.jpg"))
+    # new way
+    if nr == 0:
+        st.warning("Couldn't find a face. Try again!")
+    else:
+        st.write("Here's the faces we found")
+        st.image(returned_img)
+        col1, col2 = st.columns(2)
 
-        resized_img = load_img(path + "/extracted_face.jpg", target_size=(48, 48), color_mode="grayscale")
+        with col1:
+            st.subheader("Using own model")
+            # OWN CNN
+            obj, dominant_emotion = get_prediction_of_own_CNN(rgb_capture)
 
-        enhanced_image = load_img(path + "/enhanced_face.jpg", target_size=(48, 48), color_mode="grayscale")
-        emotion_predicted, scores = get_model_prediction(enhanced_image)
-        st.write("Model's prediction: ")
-        st.write(emotion_predicted)
-        st.write(scores)
-#         TODO:change this to the new format with multiple libraries
+            st.write('Dominant emotion: ', dominant_emotion)
+            st.write(obj)
+            # Deepface
+            analysis = DeepFace.analyze(capture_path, actions=['emotion'], detector_backend='mtcnn')
+            analysis[0]['emotion'] = format_dictionary_probs(analysis[0]['emotion'])
+
+            st.subheader("Using Deepface library")
+
+            st.write('Dominant emotion: ', analysis[0]['dominant_emotion'])
+            st.write(analysis[0]['emotion'])
+
+        with col2:
+            # SVM prediction
+            if svm_model_exists():
+                svm_model_aws = setup_svm()
+                # SVM prediction
+                if nr == 1:
+                    detected_face = faces_extracted_list[0]
+
+                    predicted_class, probabilities = svm_get_predict(capture_face_path, svm_model_aws, detected_face)
+                    svm_dictionary = get_dictonary_probs(probabilities)
+
+                    st.subheader("Using own SVM")
+                    st.write("Dominant emotion: ", predicted_class)
+
+                    st.write(svm_dictionary)
+
+            rmn = loading_RMN()
+            results = rmn.detect_emotion_for_single_frame(rgb_capture)
+            rmn_dict_proba = get_dictionary_probs_RMN(results)
+            st.subheader("Resmasknet classifier")
+
+            st.write('Dominant emotion: ', results[0]['emo_label'])
+
+            st.write(rmn_dict_proba)

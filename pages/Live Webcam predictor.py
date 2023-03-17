@@ -15,13 +15,14 @@ st.title("Example using JavaScript")
 
 st.subheader('Head over to:')
 st.write('https://deiu80.github.io/live-webcam')
-
-import streamlit as st
-
 video_file = open('webcam_video.mov', 'rb')
 video_bytes = video_file.read()
-
+st.write('Check the demo video below:')
 st.video(video_bytes)
+
+
+st.write("Built using Face-Api JS: https://github.com/justadudewhohacks/face-api.js")
+
 #
 #
 # def html_component(calc_html, width=1000, height=1200):

@@ -7,6 +7,7 @@ import tensorflow
 from keras_preprocessing.image import load_img
 import numpy as np
 from keras.models import load_model
+from rmn import RMN
 from skimage.feature import hog
 import boto3, os, time
 
@@ -27,13 +28,17 @@ images_folder_path = "./Images"
 faces_folder_path = "./Faces"
 single_face_img_path = 'Images/single_face.jpg'
 
-example_face_img_path='Faces/example_image.jpg'
+example_face_img_path = 'Faces/example_image.jpg'
 
 extracted_face_path = images_folder_path + "/extracted_face.jpg"
 enhanced_face_path = images_folder_path + "/enhanced_face.jpg"
 
 emotion_labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
 
+@st.cache_resource(show_spinner=False)
+def loading_RMN():
+    rmn = RMN()
+    return rmn
 
 def svm_model_exists():
     filename = "svm_model_only_faces.sav"
@@ -50,7 +55,7 @@ def get_viola_classifier():
 
 
 @st.cache_resource
-def get_classifier():
+def get_default_classifier():
     cascade_path = pathlib.Path(cv2.__file__).parent.absolute() / "data/haarcascade_frontalface_default.xml"
     default_classifier = cv2.CascadeClassifier(str(cascade_path))
     return default_classifier
@@ -60,11 +65,8 @@ def get_extracted_face_path():
     return extracted_face_path
 
 
-def get_enhanced_face_path():
-    return enhanced_face_path
-
-
-def prepare_image_for_svm(img):
+def preprocess_image_for_svm(img):
+    # convert it to grayscale
     img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     # Perform histogram equalization
     equalized_image = cv2.equalizeHist(img)
@@ -102,129 +104,25 @@ def image_enhancer(image):
     return equalized_image
 
 
+@st.cache_data(show_spinner=False)
 def image_resizer(image, width, height):
     return cv2.resize(image, (width, height), interpolation=cv2.INTER_CUBIC)
 
 
-@st.cache_data
-def get_prediction_deepface_way(image, img_path='default'):
-    obj = {}
-    obj["emotion"] = {}
-    #  deepface way
-    if img_path != 'default':
-        img = cv2.imread(img_path)
+@st.cache_data(show_spinner=False)
+def face_detect_NN(image_path, image=None):
+    '''
+    if you provide image_path and image variable, the latter will be used to avoid reading it from local
+    :param image_path:
+    :param threshold:
+    :param image: optional parameter for an image variable
+    :return:
+    '''
+    if image is not None:
+        original_image = image
     else:
-        img = image
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    img_gray = cv2.resize(img_gray, (48, 48))
-    img_gray = keras_preprocessing.image.img_to_array(img_gray)
-    img_gray = np.expand_dims(img_gray, axis=0)
-    img_gray /= 255
-    loaded_model = load_model('./best_model_optimised_cnn.h5')
-    loaded_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    deepface_emotion_predictions = loaded_model.predict(img_gray, verbose=1)[0, :]
-    sum_of_predictions = deepface_emotion_predictions.sum()
-
-    for i, emotion_label in enumerate(emotion_labels):
-        print(deepface_emotion_predictions[i])
-        emotion_prediction = round(100 * deepface_emotion_predictions[i] / sum_of_predictions, 5)
-        obj["emotion"][emotion_label] = emotion_prediction
-    obj["dominant_emotion"] = emotion_labels[np.argmax(deepface_emotion_predictions)]
-    print('deepface', deepface_emotion_predictions)
-
-    return obj["emotion"], obj["dominant_emotion"]
-
-
-@st.cache_data()
-def get_model_prediction(_image):
-    '''
-    :param image of 48*48 size and grayscale
-    :return: name of the predicted class, e.g happy, sad
-    '''
-    # old way
-    img_array = keras_preprocessing.image.img_to_array(_image)
-    img_array = np.expand_dims(img_array, axis=0)
-    image_input = np.vstack([img_array])
-    loaded_model = load_model('./best_model_optimised_cnn.h5')
-    loaded_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-    #  make predictions of the model
-    prediction = loaded_model.predict(image_input)
-
-    # Get the confidence score for each class
-    class_probabilities = tensorflow.nn.softmax(prediction[0]).numpy()
-
-    confidences = []
-    for lab, prob in zip(emotion_labels, class_probabilities):
-        confidences.append(round(prob * 100, 5))
-
-    return emotion_labels[np.argmax(prediction)], confidences
-
-
-# above method is for reading images from disk
-def get_img_face_frame(img_path):
-    nr_of_faces = 0
-    cv2_img = cv2.imread(img_path)
-    gray_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
-
-    faces = get_viola_classifier().detectMultiScale(gray_img,
-                                                    scaleFactor=1.2,
-                                                    minNeighbors=5,
-                                                    minSize=(30, 30),
-                                                    flags=cv2.CASCADE_FIND_BIGGEST_OBJECT)
-
-    for (x, y, width, height) in faces:
-        cv2.rectangle(gray_img, (x, y), (x + width, y + height), (0, 255, 0), 4)
-        face_frame = gray_img[y:height + y, x:x + width]
-        nr_of_faces += 1
-    if faces != ():
-        cv2.imwrite(images_folder_path + "/extracted_face.jpg", face_frame)
-    st.write("Nr of faces found: " + str(nr_of_faces))
-    return cv2.imread(images_folder_path + "/extracted_face.jpg")
-
-
-def get_all_faces(img_path):
-    list_of_faces = []
-    cv2_img = cv2.imread(img_path)
-    gray_img = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
-    cascade_path = pathlib.Path(cv2.__file__).parent.absolute() / "data/haarcascade_frontalface_alt.xml"
-    clf = cv2.CascadeClassifier(str(cascade_path))
-
-    faces = clf.detectMultiScale(gray_img,
-                                 scaleFactor=1.2,
-                                 minNeighbors=3,
-                                 minSize=(50, 50),
-                                 flags=cv2.CASCADE_DO_CANNY_PRUNING)
-
-    for (x, y, width, height) in faces:
-        face_frame = gray_img[y:height + y, x:x + width]
-        list_of_faces.append(face_frame)
-    print("nr of faces found=", len(list_of_faces))
-
-    return list_of_faces
-
-
-@st.cache_data()
-def get_marked_image(img_path):
-    modified_img = cv2.imread(img_path)
-    gray_img = cv2.cvtColor(modified_img, cv2.COLOR_BGR2GRAY)
-
-    faces = get_viola_classifier().detectMultiScale(gray_img,
-                                                    scaleFactor=1.1,
-                                                    minNeighbors=3,
-                                                    minSize=(30, 30),
-                                                    flags=cv2.CASCADE_FIND_BIGGEST_OBJECT)
-    faces_frames = []
-    for (x, y, width, height) in faces:
-        face_frame = modified_img[y:y + height, x:x + width]
-        faces_frames.append(cv2.cvtColor(face_frame, cv2.COLOR_BGR2RGB))
-        cv2.rectangle(modified_img, (x, y), (x + width, y + height), (0, 255, 0), 5)
-    return cv2.cvtColor(modified_img, cv2.COLOR_BGR2RGB), len(faces), faces_frames
-
-
-@st.cache_data
-def face_detect_NN(image_path, threshold):
-
-    original_image = cv2.imread(image_path)
+        original_image = cv2.imread(image_path)
+    threshold = 0.7
     modelFile = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
     configFile = "deploy.prototxt"
     net = cv2.dnn.readNetFromCaffe(configFile, modelFile)
@@ -238,8 +136,9 @@ def face_detect_NN(image_path, threshold):
     bboxes = []
     # Forward pass through the network
     detections = net.forward()
+
     # Loop over the detections
-    for i in range(10):
+    for i in range(len(detections)):
         # Get the confidence score of the detection
         confidence = detections[0, 0, i, 2]
 
@@ -252,19 +151,74 @@ def face_detect_NN(image_path, threshold):
             bboxes.append([x1, y1, x2, y2])
 
     faces_frames = []
+
     for (x1, y1, x2, y2) in bboxes:
         face_frame = original_image[y1:y2, x1:x2]
         faces_frames.append(cv2.cvtColor(face_frame, cv2.COLOR_BGR2RGB))
         cv2.rectangle(original_image, (x1, y1), (x2, y2), (0, 255, 0), 4)
 
-    # writing the faces extracted to the folder
+    #  NO FACES FOUND case, we return the original image ,0 and the empty list
+    if len(faces_frames) == 0:
+        return cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB), 0, faces_frames
+
+        # writing the faces extracted to the folder
     if image_path == single_face_img_path:
         for f, nr in zip(faces_frames, range(len(face_frame))):
             cv2.imwrite(faces_folder_path + '/example_image.jpg', cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
     else:
         for f, nr in zip(faces_frames, range(len(face_frame))):
             cv2.imwrite(faces_folder_path + '/face_' + str(nr) + '.jpg', cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
+
     return cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB), len(bboxes), faces_frames
+
+
+@st.cache_data(show_spinner=False)
+def get_prediction_of_own_CNN(image, img_path='default'):
+    obj = {"emotion": {}}
+    #  deepface way
+    if img_path != 'default':
+        img = cv2.imread(img_path)
+    else:
+        img = image
+
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_gray = image_resizer(img_gray, 48, 48)
+    img_gray = keras_preprocessing.image.img_to_array(img_gray)
+    img_gray = np.expand_dims(img_gray, axis=0)
+    img_gray /= 255
+    loaded_model = load_model('./best_model_optimised_cnn.h5')
+    loaded_model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    emotion_predictions = loaded_model.predict(img_gray, verbose=1)[0, :]
+
+    for i, emotion_label in enumerate(emotion_labels):
+        print(emotion_predictions[i])
+        emotion_prediction = round(100 * emotion_predictions[i], 5)
+        obj["emotion"][emotion_label] = emotion_prediction
+
+    obj["dominant_emotion"] = emotion_labels[np.argmax(emotion_predictions)]
+    print('deepface', emotion_predictions)
+
+    return obj["emotion"], obj["dominant_emotion"]
+
+
+def get_marked_image(img_path, _img=None):
+    if _img is None:
+        modified_img = cv2.imread(img_path)
+    else:
+        modified_img = _img
+    gray_img = cv2.cvtColor(modified_img, cv2.COLOR_BGR2GRAY)
+
+    faces = get_viola_classifier().detectMultiScale(gray_img,
+                                                    scaleFactor=1.1,
+                                                    minNeighbors=3,
+                                                    minSize=(30, 30),
+                                                    flags=cv2.CASCADE_FIND_BIGGEST_OBJECT)
+    faces_frames = []
+    for (x, y, width, height) in faces:
+        face_frame = modified_img[y:y + height, x:x + width]
+        faces_frames.append(cv2.cvtColor(face_frame, cv2.COLOR_BGR2RGB))
+        cv2.rectangle(modified_img, (x, y), (x + width, y + height), (0, 255, 0), 5)
+    return cv2.cvtColor(modified_img, cv2.COLOR_BGR2RGB), len(faces), faces_frames
 
 
 def setup_svm():
@@ -286,13 +240,27 @@ def setup_svm():
             return loaded_svm_model
         return None
 
-@st.cache_resource
-def svm_get_predict(img_path, _loaded_model):
+
+def svm_get_predict(face_capture_path, _loaded_model, face_img=None):
+    '''
+
+    :param face_img: facial image
+    :param face_capture_path: This is the path of the image containing only the face (face_capture)
+    :param _loaded_model: this is the SVM model that's loaded from local storage
+    :return: predicted_class/emotion and a list of all emotions confidences
+    '''
+
     features = []
-    im = cv2.imread(img_path)
-    im = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-    im = image_resizer(im, 64, 64)
-    fd1, hog_image = hog(im, orientations=7, pixels_per_cell=(8, 8), cells_per_block=(4, 4), block_norm='L2-Hys',
+    if face_img is None:
+        im = cv2.imread(face_capture_path)
+    else:
+        im = face_img
+
+    processed_face_im = preprocess_image_for_svm(im)
+
+    processed_face_im = image_resizer(processed_face_im, 64, 64)
+    fd1, hog_image = hog(processed_face_im, orientations=7, pixels_per_cell=(8, 8), cells_per_block=(4, 4),
+                         block_norm='L2-Hys',
                          transform_sqrt=False, visualize=True)
     cv2.imwrite(images_folder_path + '/hog_image.jpg', hog_image)
     features.append(fd1)
