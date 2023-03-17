@@ -1,11 +1,10 @@
 import cv2
 from deepface import DeepFace
 
-from helpers import get_default_classifier, faces_folder_path, svm_model_exists, \
-    svm_get_predict, get_prediction_of_own_CNN, preprocess_image_for_svm, face_detect_NN, loading_RMN, \
-    format_dictionary_probs, get_dictonary_probs, get_dictionary_probs_RMN,setup_svm
-import numpy as np
+from helpers import faces_folder_path, svm_model_exists, svm_get_predict, get_prediction_of_own_CNN, face_detect_NN, loading_RMN
+from helpers import format_dictionary_probs, get_dictonary_probs, get_dictionary_probs_RMN,setup_svm
 
+import numpy as np
 import streamlit as st
 
 

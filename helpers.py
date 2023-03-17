@@ -12,17 +12,6 @@ from skimage.feature import hog
 import boto3, os, time
 
 
-def download_model_from_aws(file_name_in_aws):
-    """Accessing the S3 buckets using boto3 client"""
-    # file_name_in_aws = 'svm_model_only_faces.sav'
-    s3_bucket_name = 'for-streamlit'
-    s3 = boto3.client('s3',
-                      aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
-                      aws_secret_access_key=st.secrets['AWS_SECRET_ACCESS_KEY'])
-    print("client_ready")
-    s3.download_file(s3_bucket_name, file_name_in_aws, file_name_in_aws)
-    print("downloaded_file:", file_name_in_aws)
-
 
 images_folder_path = "./Images"
 faces_folder_path = "./Faces"
@@ -34,6 +23,18 @@ extracted_face_path = images_folder_path + "/extracted_face.jpg"
 enhanced_face_path = images_folder_path + "/enhanced_face.jpg"
 
 emotion_labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
+
+def download_model_from_aws(file_name_in_aws):
+    """Accessing the S3 buckets using boto3 client"""
+    # file_name_in_aws = 'svm_model_only_faces.sav'
+    s3_bucket_name = 'for-streamlit'
+    s3 = boto3.client('s3',
+                      aws_access_key_id=st.secrets["AWS_ACCESS_KEY_ID"],
+                      aws_secret_access_key=st.secrets['AWS_SECRET_ACCESS_KEY'])
+    print("client_ready")
+    s3.download_file(s3_bucket_name, file_name_in_aws, file_name_in_aws)
+    print("downloaded_file:", file_name_in_aws)
+
 
 @st.cache_resource(show_spinner=False)
 def loading_RMN():
@@ -272,3 +273,27 @@ def svm_get_predict(face_capture_path, _loaded_model, face_img=None):
     probabilities = _loaded_model.predict_proba(features)
 
     return predicted_class[0], probabilities[0]
+
+
+
+def format_dictionary_probs(analysis):
+    for k in analysis:
+        analysis[k] = round(analysis[k], 5)
+    return analysis
+
+
+def get_dictonary_probs(probabilities):
+    obj = {}
+    for i, emotion_label in enumerate(emotion_labels):
+        obj[emotion_label] = round(100 * probabilities[i], 5)
+    return obj
+
+
+@st.cache_data
+def get_dictionary_probs_RMN(results):
+    obj = {}
+    for record in results[0]['proba_list']:
+        for label in record:
+            obj[label] = round(record[label] * 100, 5)
+
+    return obj
