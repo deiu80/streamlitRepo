@@ -1,7 +1,8 @@
 import cv2
 from deepface import DeepFace
 
-from helpers import faces_folder_path, svm_model_exists, svm_get_predict, get_prediction_of_own_CNN, face_detect_NN, loading_RMN
+from helpers import faces_folder_path, svm_model_exists, svm_get_predict, get_prediction_of_own_CNN, face_detect_NN, \
+    loading_RMN, face_detect_RMN
 from helpers import format_dictionary_probs, get_dictonary_probs, get_dictionary_probs_RMN,setup_svm
 
 import numpy as np
@@ -25,7 +26,9 @@ if img_file_buffer is not None:
     rgb_capture = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
     cv2.imwrite(capture_path, rgb_capture)
 
-    returned_img, nr, faces_extracted_list = face_detect_NN('', rgb_capture)
+    # returned_img, nr, faces_extracted_list = face_detect_NN('', rgb_capture)
+    rmn = loading_RMN()
+    returned_img, nr, faces_extracted_list = face_detect_RMN(rgb_capture, _rmn=rmn)
 
 
     # new way
@@ -68,7 +71,7 @@ if img_file_buffer is not None:
 
                     st.write(svm_dictionary)
 
-            rmn = loading_RMN()
+
             results = rmn.detect_emotion_for_single_frame(rgb_capture)
             rmn_dict_proba = get_dictionary_probs_RMN(results)
             st.subheader("Resmasknet classifier")

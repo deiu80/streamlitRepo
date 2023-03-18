@@ -1,6 +1,7 @@
 import pathlib
 import pickle
 import cv2
+import numpy
 import streamlit as st
 import keras_preprocessing
 import tensorflow
@@ -8,10 +9,9 @@ from keras_preprocessing.image import load_img
 import numpy as np
 from keras.models import load_model
 from rmn import RMN
+
 from skimage.feature import hog
 import boto3, os, time
-
-
 
 images_folder_path = "./Images"
 faces_folder_path = "./Faces"
@@ -23,6 +23,7 @@ extracted_face_path = images_folder_path + "/extracted_face.jpg"
 enhanced_face_path = images_folder_path + "/enhanced_face.jpg"
 
 emotion_labels = ['angry', 'fear', 'happy', 'neutral', 'sadness', 'surprise']
+
 
 def download_model_from_aws(file_name_in_aws):
     """Accessing the S3 buckets using boto3 client"""
@@ -40,6 +41,7 @@ def download_model_from_aws(file_name_in_aws):
 def loading_RMN():
     rmn = RMN()
     return rmn
+
 
 def svm_model_exists():
     filename = "svm_model_only_faces.sav"
@@ -111,6 +113,28 @@ def image_resizer(image, width, height):
 
 
 @st.cache_data(show_spinner=False)
+def face_detect_RMN(img_path, _rmn):
+    if type(img_path) == numpy.ndarray:
+        image = cv2.cvtColor(img_path, cv2.COLOR_BGR2RGB)
+    else:
+        image = cv2.imread(img_path)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    list_detections = _rmn.detect_faces(image)
+    face_frames = []
+    for box in list_detections:
+        face_frame = image[box['ymin'] + 5:box["ymax"] - 5, box["xmin"] + 5:box["xmax"] - 5]
+        cv2.rectangle(image, (box["xmin"], box['ymin']),
+                      (box["xmax"], box["ymax"]),
+                      (0, 255, 0), 2
+                      )
+
+        face_frames.append(face_frame)
+
+    return image, len(list_detections), face_frames
+
+
+@st.cache_data(show_spinner=False)
 def face_detect_NN(image_path, image=None):
     '''
     if you provide image_path and image variable, the latter will be used to avoid reading it from local
@@ -123,6 +147,7 @@ def face_detect_NN(image_path, image=None):
         original_image = image
     else:
         original_image = cv2.imread(image_path)
+        original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
     threshold = 0.7
     modelFile = "res10_300x300_ssd_iter_140000_fp16.caffemodel"
     configFile = "deploy.prototxt"
@@ -131,7 +156,8 @@ def face_detect_NN(image_path, image=None):
     frameWidth = original_image.shape[1]
 
     # Create a blob from the input image
-    blob = cv2.dnn.blobFromImage(original_image, 1.0, (300, 300), (104.0, 177.0, 123.0))
+
+    blob = cv2.dnn.blobFromImage(original_image, 1.0, (300, 300), (104.0, 177.0, 123.0),False,False)
     # Set the input to the model
     net.setInput(blob)
     bboxes = []
@@ -170,7 +196,7 @@ def face_detect_NN(image_path, image=None):
         for f, nr in zip(faces_frames, range(len(face_frame))):
             cv2.imwrite(faces_folder_path + '/face_' + str(nr) + '.jpg', cv2.cvtColor(f, cv2.COLOR_BGR2RGB))
 
-    return cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB), len(bboxes), faces_frames
+    return original_image, len(bboxes), faces_frames
 
 
 @st.cache_data(show_spinner=False)
@@ -192,12 +218,10 @@ def get_prediction_of_own_CNN(image, img_path='default'):
     emotion_predictions = loaded_model.predict(img_gray, verbose=1)[0, :]
 
     for i, emotion_label in enumerate(emotion_labels):
-        print(emotion_predictions[i])
         emotion_prediction = round(100 * emotion_predictions[i], 5)
         obj["emotion"][emotion_label] = emotion_prediction
 
     obj["dominant_emotion"] = emotion_labels[np.argmax(emotion_predictions)]
-    print('deepface', emotion_predictions)
 
     return obj["emotion"], obj["dominant_emotion"]
 
@@ -263,7 +287,8 @@ def svm_get_predict(face_capture_path, _loaded_model, face_img=None):
     fd1, hog_image = hog(processed_face_im, orientations=7, pixels_per_cell=(8, 8), cells_per_block=(4, 4),
                          block_norm='L2-Hys',
                          transform_sqrt=False, visualize=True)
-    cv2.imwrite(images_folder_path + '/hog_image.jpg', hog_image)
+
+    cv2.imwrite(images_folder_path + '/hog_image.jpg',   image_resizer(hog_image,224,224))
     features.append(fd1)
     # extract features from the image
     features = np.array(features)
@@ -273,7 +298,6 @@ def svm_get_predict(face_capture_path, _loaded_model, face_img=None):
     probabilities = _loaded_model.predict_proba(features)
 
     return predicted_class[0], probabilities[0]
-
 
 
 def format_dictionary_probs(analysis):
