@@ -12,4 +12,3 @@ opencv-python
 av
 deepface
 boto3
-rmn
