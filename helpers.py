@@ -149,7 +149,7 @@ def setup_svm():
         loaded_svm_model = pickle.load(open(filename, 'rb'))
         return loaded_svm_model
     else:
-        st.warning(filename + ' svm model does not exist')
+        st.warning('Svm model does not exist. Click the button below.')
         download_button = st.button(label="Download SVM model from AWS")
 
         if download_button:

@@ -27,7 +27,7 @@ if img_file_buffer is not None:
     # returned_img, nr, faces_extracted_list = face_detect_NN('', rgb_capture)
     list_of_dicts = DeepFace.extract_faces(img_path=rgb_capture,
                                            target_size=(150,150),
-                                           detector_backend="dlib",
+                                           detector_backend="mtcnn",
                                            enforce_detection=False)
     # print(list_of_dicts)
     confidence = list_of_dicts[0]['confidence']
