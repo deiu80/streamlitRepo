@@ -93,32 +93,35 @@ with group_tab:
             obj, dominant_emotion = get_prediction_of_own_CNN(face)
 
             if face.shape[1] < 250 and face.shape[0] < 250:
-                dnn_column.image(image_resizer(face, face.shape[1] * 2, face.shape[0] * 2))
+                st.image(image_resizer(face, face.shape[1] * 2, face.shape[0] * 2))
             else:
-                dnn_column.image(image_resizer(face, int(face.shape[1] / 2), int(face.shape[0] / 2)))
+                st.image(image_resizer(face, int(face.shape[1] / 2), int(face.shape[0] / 2)))
 
             if btn:
-                # expander section
-                expander2 = dnn_column.expander("See model classifications")
-                expander2.subheader("Using own model")
-                expander2.write(dominant_emotion)
-                expander2.write(obj)
+
+                expander2 = st.expander("See model classifications")
+
+                col1, col2, col3 = expander2.columns(3)
+                col1.subheader("Using own CNN model")
+                col1.write('Dominant emotion ' + str(dominant_emotion))
+                col1.write(obj)
 
                 if face_idx <= len(faces_extracted):
-                    expander2.subheader('Using Deepface')
+                    col2.subheader('Using Deepface')
+
                     face_analysis = DeepFace.analyze(face, actions=['emotion'], detector_backend='opencv',
                                                      enforce_detection=False)
                     face_analysis[0]['emotion'] = format_dictionary_probs(face_analysis[0]['emotion'])
 
-                    expander2.write(face_analysis[0]['dominant_emotion'])
-                    expander2.write(face_analysis[0]['emotion'])
+                    col2.write('Dominant emotion ' + str(face_analysis[0]['dominant_emotion']))
+                    col2.write(face_analysis[0]['emotion'])
                     if svm_model_exists():
                         predicted_class, probabilities = svm_get_predict(svm_model_aws, face_img=face)
 
-                        expander2.subheader("Using SVM")
+                        col3.subheader("Using SVM")
                         svm_dictionary = get_dictonary_probs(probabilities)
-                        expander2.write(predicted_class)
-                        expander2.write(svm_dictionary)
+                        col3.write('Dominant emotion ' + str(predicted_class))
+                        col3.write(svm_dictionary)
 
                 face_idx += 1
     else:
