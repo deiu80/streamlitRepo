@@ -70,7 +70,6 @@ analysis[0]['emotion'] = format_dictionary_probs(analysis[0]['emotion'])
 dominant_emotion_deepface = analysis[0]['dominant_emotion']
 labels["bottom_left"] += analysis[0]['dominant_emotion'] + " " + str(
     round(analysis[0]['emotion'][dominant_emotion_deepface], 2))
-
 if svm_model_exists():
     # SVM prediction
     predicted_class, probabilities = svm_get_predict(svm_model_aws, face_img=face_detected)
@@ -80,7 +79,10 @@ if svm_model_exists():
 annoted_image = annotate_example_image(example_image, labels)
 st.image(annoted_image)
 st.write("You can notice the predicted enotion and confidence scores for each class down below")
-
+st.info(
+    "Values in brackets is model's output.  \nIt can be interpreted as the confidence level of the model's prediction."
+    "  \nA higher probability :arrow_up: for a certain class means that the model is more confident that the input image belongs to that class. "
+    , icon="ℹ️")
 col1, col2, col3 = st.columns(3)
 # Define the labels and their positions
 

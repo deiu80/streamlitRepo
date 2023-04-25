@@ -26,12 +26,11 @@ if img_file_buffer is not None:
 
     # returned_img, nr, faces_extracted_list = face_detect_NN('', rgb_capture)
     list_of_dicts = DeepFace.extract_faces(img_path=rgb_capture,
-                                           target_size=(150,150),
+                                           target_size=(150, 150),
                                            detector_backend="mtcnn",
                                            enforce_detection=False)
     # print(list_of_dicts)
     confidence = list_of_dicts[0]['confidence']
-
 
     # rmn = loading_RMN()
     # returned_img, nr, faces_extracted_list = face_detect_RMN(rgb_capture, _rmn=rmn)
@@ -50,9 +49,11 @@ if img_file_buffer is not None:
             face_frame = rgb_capture[y:y + height, x:x + width]
             st.image(face_frame)
 
-
             col1, col2, col3 = st.columns(3)
-
+            st.info(
+                "Values in brackets is model's output.  \nIt can be interpreted as the confidence level of the model's prediction."
+                "  \nA higher probability :arrow_up: for a certain class means that the model is more confident that the input image belongs to that class. "
+                , icon="ℹ️")
             with col1:
                 st.subheader("Using own model")
                 # OWN CNN
@@ -73,11 +74,11 @@ if img_file_buffer is not None:
 
             if svm_model_exists():
                 with col3:
-                   # SVM prediction
+                    # SVM prediction
                     svm_model_aws = setup_svm()
                     # SVM prediction
                     if confidence > 0.5:
-                        predicted_class, probabilities = svm_get_predict( svm_model_aws, face_img=face_frame)
+                        predicted_class, probabilities = svm_get_predict(svm_model_aws, face_img=face_frame)
                         svm_dictionary = get_dictonary_probs_from_CNN(probabilities)
 
                         st.subheader("Using own SVM")

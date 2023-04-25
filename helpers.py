@@ -114,7 +114,7 @@ def get_prediction_of_own_CNN(image, img_path='default'):
     emotion_predictions = loaded_model.predict(img_gray, verbose=1)[0, :]
 
     for i, emotion_label in enumerate(emotion_labels):
-        emotion_prediction = round(100 * emotion_predictions[i], 5)
+        emotion_prediction = round(100 * emotion_predictions[i], 3)
         obj["emotion"][emotion_label] = emotion_prediction
 
     obj["dominant_emotion"] = emotion_labels[np.argmax(emotion_predictions)]
@@ -163,7 +163,7 @@ def setup_svm():
 
 
 @st.cache_data
-def svm_get_predict(_loaded_model, face_capture_path=None,  face_img=None):
+def svm_get_predict(_loaded_model, face_capture_path=None, face_img=None):
     '''
 
     :param face_img: facial image
@@ -195,17 +195,15 @@ def svm_get_predict(_loaded_model, face_capture_path=None,  face_img=None):
     predicted_class = emotion_labels[index_of_max]
     return predicted_class, probabilities[0]
 
+
 def format_dictionary_probs(analysis):
     for k in analysis:
-        analysis[k] = round(analysis[k], 5)
+        analysis[k] = round(analysis[k], 3)
     return analysis
+
 
 def get_dictonary_probs_from_CNN(probabilities):
     obj = {}
     for i, emotion_label in enumerate(emotion_labels):
-        obj[emotion_label] = round(100 * probabilities[i], 5)
+        obj[emotion_label] = round(100 * probabilities[i], 3)
     return obj
-
-
-
-
