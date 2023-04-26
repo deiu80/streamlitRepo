@@ -36,8 +36,10 @@ st.write(
 st.subheader("Convolutional Neural Networks")
 st.image('Plots/architecture-cnn-en.jpeg')
 
+st.write("Convolutional layers are the building block of such networks, this representing the place where computation happens to extract information from image data. Each layer contains learnable filters, also known as kernels, represented by 3x3 matrices ")
+st.write("The main purpose of pooling is to set the network to recognize an object in an image, regardless of where it appears in the image. ")
 st.write("Play the below animation. It is showing how CNNs layers work when given an image (of a digit in this case). ")
-st.write('With each layer, convolution operations are performed on reduced dimension of the image')
+st.write('With each layer, convolution operations are performed on reduced dimension of the image and in greater depth of detail.')
 video_file = open('Plots/cnn_video.mp4', 'rb')
 video_bytes = video_file.read()
 st.video(video_bytes)
